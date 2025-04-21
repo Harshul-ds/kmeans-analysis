@@ -4,7 +4,8 @@ from sklearn.metrics import accuracy_score
 from scipy.spatial.distance import cosine, jaccard
 import time
 from collections import Counter
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import os
 
 class KMeans:
@@ -114,45 +115,182 @@ def evaluate_kmeans(X, y, n_clusters, distance_metric):
     }
 
 def plot_results(results, metrics):
-    # Set style for better visualization
-    plt.style.use('seaborn-v0_8')
+    # Color scheme
+    colors = {'euclidean': '#2ecc71', 'cosine': '#3498db', 'jaccard': '#e74c3c'}
     
     # 1. Accuracy Comparison
-    plt.figure(figsize=(10, 6))
-    accuracies = [results[m]['accuracy'] * 100 for m in metrics]  # Convert to percentage
-    plt.bar(metrics, accuracies, color=['#2ecc71', '#3498db', '#e74c3c'])
-    plt.title('Clustering Accuracy by Distance Metric', pad=20, fontsize=12)
-    plt.ylabel('Accuracy (%)', fontsize=10)
-    plt.ylim(0, 100)  # Set y-axis from 0 to 100%
-    plt.xticks(rotation=45, fontsize=10)
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig('figures/accuracy_comparison.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    fig = go.Figure()
+    accuracies = [results[m]['accuracy'] * 100 for m in metrics]
     
-    # 2. Iterations Comparison
-    plt.figure(figsize=(10, 6))
-    iterations = [results[m]['iterations'] for m in metrics]
-    plt.bar(metrics, iterations, color=['#2ecc71', '#3498db', '#e74c3c'])
-    plt.title('Number of Iterations to Converge by Distance Metric', pad=20, fontsize=12)
-    plt.ylabel('Number of Iterations', fontsize=10)
-    plt.xticks(rotation=45, fontsize=10)
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig('figures/iterations_comparison.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    fig.add_trace(
+        go.Bar(
+            x=metrics,
+            y=accuracies,
+            text=[f'{x:.1f}%' for x in accuracies],
+            textposition='auto',
+            marker_color=[colors[m] for m in metrics],
+            hovertemplate='%{y:.1f}%<extra></extra>'
+        )
+    )
     
-    # 3. Convergence Time Comparison
-    plt.figure(figsize=(10, 6))
+    fig.update_layout(
+        title={
+            'text': 'Clustering Accuracy by Distance Metric',
+            'y':0.95,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(size=24)
+        },
+        yaxis_title='Accuracy (%)',
+        yaxis_range=[0, 100],
+        template='plotly_white',
+        height=600,
+        width=1000,
+        showlegend=False,
+        annotations=[
+            dict(
+                x=metric,
+                y=acc,
+                text=f'{acc:.1f}%',
+                yanchor='bottom',
+                showarrow=False,
+                font=dict(size=14)
+            ) for metric, acc in zip(metrics, accuracies)
+        ]
+    )
+    
+    fig.update_xaxes(tickangle=0, tickfont=dict(size=14))
+    fig.update_yaxes(gridwidth=1, gridcolor='LightGray')
+    
+    fig.write_html("figures/accuracy_comparison.html")
+    fig.write_image("figures/accuracy_comparison.png", scale=2)
+    
+    # 2. Performance Metrics
+    fig = go.Figure()
+    
     times = [results[m]['convergence_time'] for m in metrics]
-    plt.bar(metrics, times, color=['#2ecc71', '#3498db', '#e74c3c'])
-    plt.title('Convergence Time by Distance Metric', pad=20, fontsize=12)
-    plt.ylabel('Time (seconds)', fontsize=10)
-    plt.xticks(rotation=45, fontsize=10)
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig('figures/convergence_time.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    iterations = [results[m]['iterations'] for m in metrics]
+    
+    # Add iterations bars
+    fig.add_trace(
+        go.Bar(
+            name='Iterations',
+            x=metrics,
+            y=iterations,
+            text=iterations,
+            textposition='auto',
+            marker_color=[colors[m] for m in metrics],
+            opacity=0.9,
+            hovertemplate='Iterations: %{y}<extra></extra>'
+        )
+    )
+    
+    # Add convergence time line and markers
+    fig.add_trace(
+        go.Scatter(
+            name='Time (seconds)',
+            x=metrics,
+            y=times,
+            text=[f'{t:.1f}s' for t in times],
+            mode='lines+markers+text',
+            marker=dict(size=12),
+            line=dict(width=3, dash='dot'),
+            textposition='top center',
+            yaxis='y2',
+            hovertemplate='Time: %{y:.1f}s<extra></extra>'
+        )
+    )
+    
+    fig.update_layout(
+        title={
+            'text': 'Convergence Performance by Distance Metric',
+            'y':0.95,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(size=24)
+        },
+        yaxis=dict(
+            title='Number of Iterations',
+            gridwidth=1,
+            gridcolor='LightGray',
+            side='left'
+        ),
+        yaxis2=dict(
+            title='Time (seconds)',
+            overlaying='y',
+            side='right',
+            gridwidth=1,
+            gridcolor='LightGray'
+        ),
+        template='plotly_white',
+        height=600,
+        width=1000,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+    
+    fig.write_html("figures/performance_metrics.html")
+    fig.write_image("figures/performance_metrics.png", scale=2)
+    
+    # 3. SSE Convergence History (normalized)
+    fig = go.Figure()
+    
+    for metric in metrics:
+        history = results[metric]['sse_history']
+        # Normalize SSE values relative to initial SSE
+        normalized_history = [sse/history[0] for sse in history]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(len(history))),
+                y=normalized_history,
+                name=metric.capitalize(),
+                line=dict(color=colors[metric], width=2),
+                mode='lines',
+                hovertemplate='Relative SSE: %{y:.3f}<br>Iteration: %{x}<extra></extra>'
+            )
+        )
+    
+    fig.update_layout(
+        title={
+            'text': 'Normalized SSE Convergence History',
+            'y':0.95,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(size=24)
+        },
+        xaxis_title="Iteration",
+        yaxis_title="Relative SSE (normalized)",
+        yaxis_type="log",
+        template='plotly_white',
+        height=600,
+        width=1000,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        hovermode='x unified'
+    )
+    
+    # Add grid
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    
+    fig.write_html("figures/convergence_history.html")
+    fig.write_image("figures/convergence_history.png", scale=2)
 
 def main():
     # Create figures directory if it doesn't exist
@@ -183,7 +321,10 @@ def main():
     
     # Generate plots
     plot_results(results, metrics)
-    print("\nVisualization files have been saved in the 'figures' directory.")
+    print("\nVisualization files have been saved in the 'figures' directory:")
+    print("1. accuracy_comparison.html (interactive) and .png")
+    print("2. performance_metrics.html (interactive) and .png")
+    print("3. convergence_history.html (interactive) and .png")
 
 if __name__ == "__main__":
     main()
