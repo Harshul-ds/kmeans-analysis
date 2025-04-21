@@ -1,0 +1,6 @@
+Data Description:
+
+data.csv contains 10000 data samples, and each sample has 784 features.
+
+label.csv contains the ground-truth labels of all data samples. There are 10 kinds of labels in the label.csv.
+
